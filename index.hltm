@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>格鲁特动作模拟 · Groot Motion Sim</title>
+<style>
+body{background:#101418;color:#dfe6ee;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px;margin:0}
+h1{font-size:18px;margin:8px}
+canvas{background:#0a0d10;border-radius:8px}
+.ctrl{display:flex;gap:8px;margin:12px;flex-wrap:wrap;justify-content:center}
+button{background:#2a3b4d;color:#dfe6ee;border:none;padding:8px 14px;border-radius:6px;cursor:pointer}
+button:hover{background:#3a5068}
+#info{font-size:13px;color:#9ab;margin:4px 0 10px}
+</style>
+</head>
+<body>
+<h1>格鲁特动作模拟 · 拟态行走 / 坐下 / 追光</h1>
+<canvas id="cv" width="640" height="400"></canvas>
+<div id="info">状态：待机</div>
+<div class="ctrl">
+<button onclick="setState('walk')">走</button>
+<button onclick="setState('sit')">坐下</button>
+<button onclick="setState('stand')">起身</button>
+<button onclick="setState('chase')">追光</button>
+<button onclick="setState('idle')">待机</button>
+<button onclick="demo()">自动演示</button>
+</div>
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const groundY=330;
+let state='idle',target='idle';
+let x=320;
+let walkPhase=0;
+let lightX=520;
+let cur={hipY:groundY-58,footLx:-10,footRx:10};
+let demoQueue=[],demoTimer=0;
+const NAME={idle:'待机',walk:'拟态行走',sit:'坐下',stand:'起身',chase:'追光'};
+
+function setState(ns){target=ns;}
+function demo(){demoQueue=['walk','sit','chase','stand','idle'];demoTimer=0;}
+
+function update(){
+  if(target!==state)state=target;
+  let th=groundY-58,flx=-10,frx=10,dx=0;
+  if(state==='walk'){
+    flx=-10+Math.sin(walkPhase)*20;
+    frx=10-Math.sin(walkPhase)*20;
+    dx=1.2;walkPhase+=0.18;
+  }else if(state==='sit'||state==='chase'){
+    th=groundY-14;flx=22;frx=40;
+    if(state==='chase'&&Math.abs(x-lightX)>40)dx=lightX>x?1.6:-1.6;
+  }
+  x+=dx;
+  cur.hipY+=(th-cur.hipY)*0.08;
+  cur.footLx+=(flx-cur.footLx)*0.08;
+  cur.footRx+=(frx-cur.footRx)*0.08;
+  if(demoQueue.length){
+    demoTimer++;
+    if(demoTimer>150){demoTimer=0;setState(demoQueue.shift());}
+  }
+  document.getElementById('info').textContent='状态：'+NAME[state];
+}
+
+function legBend(H,F,sign){
+  const dx=F[0]-H[0],dy=F[1]-H[1];
+  const d=Math.hypot(dx,dy)||1;
+  const L=32;
+  const h=Math.sqrt(Math.max(0,L*L-d*d/4));
+  const mx=(H[0]+F[0])/2,my=(H[1]+F[1])/2;
+  const nx=-dy/d,ny=dx/d;
+  return [mx+nx*h*sign,my+ny*h*sign];
+}
+function drawLeg(H,F,sign){
+  const K=legBend(H,F,sign);
+  ctx.beginPath();
+  ctx.moveTo(H[0],H[1]);ctx.lineTo(K[0],K[1]);ctx.lineTo(F[0],F[1]);
+  ctx.strokeStyle='#8b5a2b';ctx.lineWidth=7;ctx.lineCap='round';ctx.stroke();
+  ctx.beginPath();ctx.arc(F[0],F[1],8,0,7);
+  ctx.fillStyle='#2b2b2b';ctx.fill();
+  ctx.strokeStyle='#555';ctx.lineWidth=2;ctx.stroke();
+}
+function drawBody(){
+  const bent=cur.hipY<groundY-40?1:-1;
+  ctx.fillStyle='#6b4423';
+  ctx.beginPath();
+  const px=x-17,py=cur.hipY-45,w=34,h=45,r=8;
+  ctx.moveTo(px+r,py);
+  ctx.arcTo(px+w,py,px+w,py+h,r);
+  ctx.arcTo(px+w,py+h,px,py+h,r);
+  ctx.arcTo(px,py+h,px,py,r);
+  ctx.arcTo(px,py,px+w,py,r);
+  ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.arc(x,cur.hipY-62,22,0,7);
+  ctx.fillStyle='#7a4f2b';ctx.fill();
+  const look=lightX>x?3:-3;
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(x-7+look,cur.hipY-64,6,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(x+7+look,cur.hipY-64,6,0,7);ctx.fill();
+  ctx.fillStyle='#1d1d1d';
+  ctx.beginPath();ctx.arc(x-7+look*1.5,cur.hipY-63,3,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(x+7+look*1.5,cur.hipY-63,3,0,7);ctx.fill();
+  ctx.strokeStyle='#3f9b3f';ctx.lineWidth=3;ctx.lineCap='round';
+  for(let i=-1;i<=1;i++){
+    ctx.beginPath();
+    ctx.moveTo(x+i*8,cur.hipY-84);
+    ctx.quadraticCurveTo(x+i*10,cur.hipY-100,x+i*4,cur.hipY-104);
+    ctx.stroke();
+  }
+  const H=[x,cur.hipY];
+  drawLeg(H,[x+cur.footLx,groundY-8],bent);
+  drawLeg(H,[x+cur.footRx,groundY-8],bent);
+}
+function draw(){
+  ctx.fillStyle='#0a0d10';ctx.fillRect(0,0,640,400);
+  ctx.strokeStyle='#2e2e2e';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,groundY);ctx.lineTo(640,groundY);ctx.stroke();
+  ctx.fillStyle='rgba(255,210,110,0.22)';
+  ctx.beginPath();ctx.ellipse(lightX,groundY-4,46,10,0,0,7);ctx.fill();
+  drawBody();
+}
+function loop(){update();draw();requestAnimationFrame(loop);}
+loop();
+</script>
+</body>
+</html>
